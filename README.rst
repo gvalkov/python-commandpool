@@ -5,33 +5,26 @@ Commandpool
 
 |pypi| |build| |license|
 
-Utility classes and functions for running subprocess commands in parallel:
+Functions for running subprocesses in parallel without fuss or threads.
 
 .. code-block:: python
 
-  >>> from random import randrange
-  >>> from commandpool import run
+  from commandpool import run
 
-  >>> commands = ['sleep %s' % randrange(5) for _ in range(100)]
+  commands = [...]
 
-  >>> for proc, cmd in run(commands):
-  ...    print(proc.returncode, proc, cmd, sep=', ')
-  0, <subprocess.Popen object at 0x7fa470b5e278>, sleep 1
-  0, <subprocess.Popen object at 0x7fa470b449b0>, sleep 2
-  0, <subprocess.Popen object at 0x7fa470b53d30>, sleep 2
-  0, <subprocess.Popen object at 0x7fa470b44b70>, sleep 3
-  0, <subprocess.Popen object at 0x7fa470b53cf8>, sleep 3
-  0, <subprocess.Popen object at 0x7fa470b53d68>, sleep 4
+  # Start all commands at the same time.
+  run(commands)
 
-One way to look at the functionality provided by this library is like a
-`subprocess`_ equivalent of:
+  # Run at most 5 commands at a time.
+  run(commands, concurrency=5)
 
-.. code-block:: shell
+  # run() returns a generator that yields completed commands.
+  for proc, cmd in run(commands):
+      assert proc.returncode != None
 
-  echo $commands | xargs -P $concurrency sh -c
+Please refer to the *usage* section for more information.
 
-This library works by periodically checking if started processes have finished
-and then starting new ones in their place.
 
 Installation
 ------------
@@ -46,9 +39,6 @@ The latest stable version of commandpool can be installed from pypi:
 Usage
 -----
 
-Functional
-~~~~~~~~~~
-
 .. code-block:: python
 
   from commandpool import run
@@ -59,10 +49,10 @@ Functional
   # Start all commands at the same time (this is the default).
   run(commands, concurrency=None)
 
-  # The duration between 'ticks' is configurable.
+  # The command-check interval is configurable though `sleep_seconds`.
   run(commands, sleep_seconds=0.1)
 
-  # Processing commands as they are finished.
+  # Processing commands as they are done.
   for proc, cmd in run(commands):
       assert isinstance(proc, subprocess.Popen)
 
@@ -79,24 +69,6 @@ Functional
   # ...
 
 
-Subclassing
-~~~~~~~~~~~
-
-.. code-block:: python
-
-  from commandpool import ConcurrentCommandRunner
-
-  class MyCommandRunner(ConcurrentCommandRunner):
-     def start_command(self, cmd):
-         ...
-
-     def command_finished(self, proc, cmd):
-         ...
-
-  runner = MyCommandRunner(commands, sleep_interval=1.0)
-  runner.run()
-
-
 Todo
 ----
 
@@ -108,11 +80,9 @@ Todo
 Alternatives
 ------------
 
-``ConcurrentCommandRunner`` can be implemented in a few lines with the help of
-`concurrent.futures`_, assuming that spawning a thread per command is
-acceptable. This also has the added benefit of yielding as soon as a command
-(wrapped in a future) is complete, instead of at ``sleep_seconds`` intervals, as
-is the case with ``ConcurrentCommandRunner``.
+The ``run()`` function can be implemented in a few lines with the help
+of `concurrent.futures`_, assuming that spawning a thread per command
+is acceptable.
 
 .. code-block:: python
 
@@ -123,6 +93,17 @@ is the case with ``ConcurrentCommandRunner``.
      futures = {pool.submit(run, cmd): cmd for cmd in commands}
      for res in as_completed(futures):
          print(futures[res], res.returncode)
+
+The above also has the advantage of yielding as soon as commands are done
+instead of at ``sleep_seconds`` intervals, as is the case with ``run()``.
+
+There is also nothing wrong with just shelling-out to ``xargs`` if you don't
+need the extra flexibility that commandpool provides.
+
+.. code-block:: python
+
+  from subprocess import run
+  run('xargs -0P 5 sh -c', shell=True, stdin=b'\0'.join(commands))
 
 
 License
